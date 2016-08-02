@@ -177,16 +177,16 @@ struct ibv_ah* ud_ah_create( uint16_t dlid )
 
     memset(&ah_attr, 0, sizeof(ah_attr));
 
-    ah_attr.is_global     = 1;
+    ah_attr.is_global     = 0;
     ah_attr.dlid          = dlid;
     ah_attr.sl            = 0;
     ah_attr.src_path_bits = 0;
     ah_attr.port_num      = IBDEV->port_num;
 
-    memset(&ah_attr.grh, 0, sizeof(struct ibv_global_route));
-    memcpy(&(ah_attr.grh.dgid.raw),
-    &(IBDEV->mgid.raw),
-    sizeof(ah_attr.grh.dgid.raw));
+    //memset(&ah_attr.grh, 0, sizeof(struct ibv_global_route));
+    //memcpy(&(ah_attr.grh.dgid.raw),
+    //&(IBDEV->mgid.raw),
+    //sizeof(ah_attr.grh.dgid.raw));
 
     ah = ibv_create_ah(IBDEV->ud_pd, &ah_attr);
     if (NULL == ah) {
