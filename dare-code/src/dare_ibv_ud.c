@@ -85,6 +85,8 @@ handle_rc_syn_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw);
 static int
 handle_rc_synack(struct ibv_wc *wc, rc_syn_t *msg);
 static int
+handle_rc_synack_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw);
+static int
 handle_rc_ack(struct ibv_wc *wc, rc_ack_t *msg);
 static void
 handle_downsize_request(struct ibv_wc *wc, reconf_req_t *request);
@@ -182,8 +184,8 @@ struct ibv_ah* ud_ah_create( uint16_t dlid )
     ah_attr.port_num      = IBDEV->port_num;
 
     memset(&ah_attr.grh, 0, sizeof(struct ibv_global_route));
-    memcpy(&(ah_attr.grh.dgid.raw), 
-    &(IBDEV->mgid.raw), 
+    memcpy(&(ah_attr.grh.dgid.raw),
+    &(IBDEV->mgid.raw),
     sizeof(ah_attr.grh.dgid.raw));
 
     ah = ibv_create_ah(IBDEV->ud_pd, &ah_attr);
@@ -211,7 +213,7 @@ struct ibv_ah* ud_ah_create_back( uint16_t dlid, uint8_t* raw )
 
     memset(&ah_attr.grh, 0, sizeof(struct ibv_global_route));
     memcpy(&(ah_attr.grh.dgid.raw),
-           raw, 
+           raw,
            sizeof(ah_attr.grh.dgid.raw));
 
 
@@ -1353,7 +1355,7 @@ handle_message_from_client_back( struct ibv_wc *wc, ud_hdr_t *ud_hdr, uint8_t* r
             /* Second message of the 3-way handshake protocol */
             //info(log_fp, ">> Received RC_SYNACK from lid%"PRIu16"\n", wc->slid);
             type = MSG_NONE;
-            rc = handle_rc_synack(wc, (rc_syn_t*)ud_hdr);
+            rc = handle_rc_synack_back(wc, (rc_syn_t*)ud_hdr, raw);
             if (0 != rc) {
                 if (REQ_MAJORITY == rc) {
                     type = ud_hdr->type;
@@ -1913,6 +1915,111 @@ handle_rc_synack(struct ibv_wc *wc, rc_syn_t *msg)
     if (0 == ep->rc_connected) {
         /* Create UD endpoint from WC */
         wc_to_ud_ep(&ep->ud_ep, wc);
+        debug(log_fp, "NEW SYNACK msg from server %"PRIu8" with lid=%"PRIu16"\n",
+                msg->idx, ep->ud_ep.lid);
+
+        /* Set log and ctrl memory region info */
+        ep->rc_ep.rmt_mr[LOG_QP].raddr  = msg->log_rm.raddr;
+        ep->rc_ep.rmt_mr[LOG_QP].rkey   = msg->log_rm.rkey;
+        ep->rc_ep.rmt_mr[CTRL_QP].raddr = msg->ctrl_rm.raddr;
+        ep->rc_ep.rmt_mr[CTRL_QP].rkey  = msg->ctrl_rm.rkey;
+
+        /* Set the remote QPNs */
+        ep->rc_ep.rc_qp[LOG_QP].qpn    = qpns[0];
+        ep->rc_ep.rc_qp[CTRL_QP].qpn   = qpns[1];
+
+        /* Set MTU for this connection */
+        ep->mtu = msg->mtu > IBDEV->mtu ? IBDEV->mtu : msg->mtu;
+
+        /* Mark RC established */
+        ep->rc_connected = 1;
+#if 0
+        info(log_fp, "[%02"PRIu8"]  log: "
+                         "RQPN=%"PRIu32"; "
+                         "RMR=[%"PRIu64"; %"PRIu32"]\n",
+                          msg->idx,
+                          ep->rc_ep.rc_qp[LOG_QP].qpn,
+                          ep->rc_ep.rmt_mr[LOG_QP].raddr,
+                          ep->rc_ep.rmt_mr[LOG_QP].rkey);
+        info(log_fp, "     ctrl: "
+                         "RQPN=%"PRIu32"; "
+                         "RMR=[%"PRIu64"; %"PRIu32"]\n",
+                          ep->rc_ep.rc_qp[CTRL_QP].qpn,
+                          ep->rc_ep.rmt_mr[CTRL_QP].raddr,
+                          ep->rc_ep.rmt_mr[CTRL_QP].rkey);
+#endif
+
+        /* Connect only CTRL QP */
+        rc = rc_connect_server(msg->idx, CTRL_QP);
+        if (0 != rc) {
+            error_return(1, log_fp, "Cannot connect server (CTRL)\n");
+        }
+        if (SID_GET_L(SRV_DATA->ctrl_data->sid) &&
+             SID_GET_IDX(SRV_DATA->ctrl_data->sid) == SRV_DATA->config.idx)
+        {
+            /* I'm the leader -- connect LOG QP */
+            rc = rc_connect_server(msg->idx, LOG_QP);
+            if (0 != rc) {
+                error_return(1, log_fp, "Cannot connect server (LOG)\n");
+            }
+        }
+        info_wtime(log_fp, "New connection: #%"PRIu8"\n", msg->idx);
+
+        /* Verify the number of RC established; if RC established with at
+         * least half of the group, then we can proceed further */
+        uint8_t i;
+        uint8_t connections = 0;
+        uint8_t size = get_group_size(SRV_DATA->config);
+        for (i = 0; i < size; i++) {
+            if (i == SRV_DATA->config.idx) continue;
+            if (!CID_IS_SERVER_ON(SRV_DATA->config.cid, i)) continue;
+            ep = (dare_ib_ep_t*)SRV_DATA->config.servers[i].ep;
+            if (ep->rc_connected) {
+                connections++;
+            }
+        }
+        /* Note: I'm not included */
+        if (connections >= size / 2) {
+        //if (connections > size / 2) {
+            ret = REQ_MAJORITY;
+        }
+    }
+
+    /* Send RC_ACK msg */
+    ep = (dare_ib_ep_t*)SRV_DATA->config.servers[msg->idx].ep;
+    rc_ack_t *reply = (rc_ack_t*)IBDEV->ud_send_buf;
+    uint32_t len = sizeof(rc_ack_t);
+    memset(reply, 0, len);
+    reply->hdr.id   = msg->hdr.id;
+    reply->hdr.type = RC_ACK;
+    reply->idx      = SRV_DATA->config.idx;
+    //info(log_fp, ">> Sending back RC ACK msg\n");
+    rc = ud_send_message(&ep->ud_ep, len);
+    if (0 != rc) {
+        error_return(1, log_fp, "Cannot send UD message\n");
+    }
+
+    return ret;
+}
+
+static int
+handle_rc_synack_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
+{
+    int rc, ret = 0;
+    dare_ib_ep_t *ep;
+    uint32_t *qpns = (uint32_t*)msg->data;
+
+    if (!CID_IS_SERVER_ON(SRV_DATA->config.cid, msg->idx)) {
+        /* Configuration inconsistency; it will be solved later */
+        return 0;
+    }
+
+
+    /* Verify if RC already established */
+    ep = (dare_ib_ep_t*)SRV_DATA->config.servers[msg->idx].ep;
+    if (0 == ep->rc_connected) {
+        /* Create UD endpoint from WC */
+        wc_to_ud_ep_back(&ep->ud_ep, wc, raw);
         debug(log_fp, "NEW SYNACK msg from server %"PRIu8" with lid=%"PRIu16"\n",
                 msg->idx, ep->ud_ep.lid);
 
@@ -2770,4 +2877,3 @@ wc_to_ud_ep_back(ud_ep_t *ud_ep, struct ibv_wc *wc, uint8_t* raw)
     ud_ep->qpn = wc->src_qp;
     return 0;
 }
-
