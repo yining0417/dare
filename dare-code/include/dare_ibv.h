@@ -1,17 +1,17 @@
-/**                                                                                                      
+/**
  * DARE (Direct Access REplication)
  *
  * Network module for the DARE consensus algorithm (IB verbs)
  *
  * Copyright (c) 2014-2015 ETH-Zurich. All rights reserved.
- * 
+ *
  * Author(s): Marius Poke <marius.poke@inf.ethz.ch>
- * 
+ *
  */
- 
+
 #include <infiniband/verbs.h> /* OFED IB verbs */
 #include <dare.h>
- 
+
 #ifndef DARE_IBV_H
 #define DARE_IBV_H
 
@@ -48,6 +48,7 @@ struct ud_ep_t {
     uint16_t lid;
     uint32_t qpn;
     struct ibv_ah *ah;
+    uint8_t raw[16];
 };
 typedef struct ud_ep_t ud_ep_t;
 
@@ -67,7 +68,7 @@ struct rc_qp_t {
     uint32_t qpn;               // remote QP number
     uint32_t send_count;        // number of posted sends
     uint8_t  state;             // QP's state
-}; 
+};
 typedef struct rc_qp_t rc_qp_t;
 
 /* Endpoint RC info */
@@ -91,10 +92,10 @@ struct dare_ib_device_t {
     struct ibv_device *ib_dev;
     struct ibv_context *ib_dev_context;
     struct ibv_device_attr ib_dev_attr;
-    uint16_t pkey_index;    
-    uint8_t port_num;       // port number 
+    uint16_t pkey_index;
+    uint8_t port_num;       // port number
     enum ibv_mtu mtu;       // MTU for this device
-    uint16_t lid;           // local ID for this device        
+    uint16_t lid;           // local ID for this device
 
     /* QP for listening for clients requests - UD */
     struct ibv_pd           *ud_pd;
@@ -108,12 +109,12 @@ struct dare_ib_device_t {
     struct ibv_mr           *ud_send_mr;
     uint32_t                ud_max_inline_data;
     uint64_t  request_id;
-    
+
     /* Multicast */
     struct ibv_ah *ib_mcast_ah;
     union ibv_gid mgid;
     uint16_t      mlid;
-    
+
     /* QPs for inter-server communication - RC */
     struct ibv_pd *rc_pd;
     struct ibv_cq *rc_cq[2];
@@ -122,11 +123,11 @@ struct dare_ib_device_t {
     struct ibv_mr *lcl_mr[2];
     uint32_t      rc_max_inline_data;
     uint32_t      rc_max_send_wr;
-    
+
     /* Snapshot */
     struct ibv_mr *prereg_snapshot_mr;
     struct ibv_mr *snapshot_mr;
-    
+
     int ulp_type;
     void *udata;
 };
@@ -191,7 +192,7 @@ int print_qp_state( void *qp );
 int dare_ib_print_ud_qp();
 
 void dare_ib_send_msg();
-int find_max_inline( struct ibv_context *context, 
+int find_max_inline( struct ibv_context *context,
                      struct ibv_pd *pd,
                      uint32_t *max_inline_arg );
 

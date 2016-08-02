@@ -1814,6 +1814,7 @@ handle_rc_syn_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
 
     /* Verify if RC already established */
     ep = (dare_ib_ep_t*)SRV_DATA->config.servers[msg->idx].ep;
+    memcpy((ep->ud_ep).raw, raw, 16);
     if (0 == ep->rc_connected) {
         /* Create UD endpoint from WC */
         wc_to_ud_ep_back(&ep->ud_ep, wc, raw);
