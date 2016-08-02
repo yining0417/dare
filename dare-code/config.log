@@ -1,0 +1,1 @@
+./configure --prefix=/home/ning/dare --with-ev=/home/ning/dare/libev
