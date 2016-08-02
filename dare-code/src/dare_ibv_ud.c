@@ -1814,7 +1814,7 @@ handle_rc_syn_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
 
     /* Verify if RC already established */
     ep = (dare_ib_ep_t*)SRV_DATA->config.servers[msg->idx].ep;
-    memcpy(&((ep->ud_ep).raw), raw, 16);
+    //memcpy((ep->ud_ep).raw, raw, 16);
     if (0 == ep->rc_connected) {
         /* Create UD endpoint from WC */
         wc_to_ud_ep_back(&ep->ud_ep, wc, raw);
@@ -1852,7 +1852,7 @@ handle_rc_syn_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
 
 
         /* Connect CTRL QP */
-        rc = rc_connect_server(msg->idx, CTRL_QP);
+        rc = rc_connect_server_back(msg->idx, CTRL_QP, raw);
         if (0 != rc) {
             error_return(1, log_fp, "Cannot connect server (CTRL)\n");
         }
@@ -1860,7 +1860,7 @@ handle_rc_syn_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
              SID_GET_IDX(SRV_DATA->ctrl_data->sid) == SRV_DATA->config.idx)
         {
             /* I'm the leader -- connect LOG QP */
-            rc = rc_connect_server(msg->idx, LOG_QP);
+            rc = rc_connect_server_back(msg->idx, LOG_QP, raw);
             if (0 != rc) {
                 error_return(1, log_fp, "Cannot connect server (LOG)\n");
             }
@@ -2056,7 +2056,7 @@ handle_rc_synack_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
 #endif
 
         /* Connect only CTRL QP */
-        rc = rc_connect_server(msg->idx, CTRL_QP);
+        rc = rc_connect_server_back(msg->idx, CTRL_QP,raw);
         if (0 != rc) {
             error_return(1, log_fp, "Cannot connect server (CTRL)\n");
         }
@@ -2064,7 +2064,7 @@ handle_rc_synack_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
              SID_GET_IDX(SRV_DATA->ctrl_data->sid) == SRV_DATA->config.idx)
         {
             /* I'm the leader -- connect LOG QP */
-            rc = rc_connect_server(msg->idx, LOG_QP);
+            rc = rc_connect_server_back(msg->idx, LOG_QP,raw);
             if (0 != rc) {
                 error_return(1, log_fp, "Cannot connect server (LOG)\n");
             }

@@ -1,12 +1,12 @@
-/**                                                                                                      
+/**
  * DARE (Direct Access REplication)
- * 
+ *
  * Reliable Connection (RC) over InfiniBand
  *
  * Copyright (c) 2014-2015 ETH-Zurich. All rights reserved.
- * 
+ *
  * Author(s): Marius Poke <marius.poke@inf.ethz.ch>
- * 
+ *
  */
 
 #ifndef DARE_IBV_RC_H
@@ -23,7 +23,7 @@
  * The WR Identifier (WRID)
  * the WRID is a 64-bit value [SSN|WA|TAG|CONN], where
     * SSN is the Send Sequence Number
-    * WA is the Wrap-Around flag, set for log update WRs 
+    * WA is the Wrap-Around flag, set for log update WRs
     * TAG is a flag set for special signaled WRs (to avoid QPs overflow)
     * CONN is a 8-bit index that identifies the connection (the remote server)
  */
@@ -77,6 +77,7 @@ int rc_get_remote_apply_offsets();
 /* QP interface */
 int rc_disconnect_server( uint8_t idx );
 int rc_connect_server( uint8_t idx, int qp_id );
+int rc_connect_server_back( uint8_t idx, int qp_id, uint8_t* raw );
 int rc_revoke_log_access();
 int rc_restore_log_access();
 
@@ -84,7 +85,7 @@ int rc_restore_log_access();
 double rc_get_loggp_params( uint32_t size, int type, int *poll_count, int write, int inline_flag );
 double rc_loggp_prtt( int n, double delay, uint32_t size );
 int rc_loggp_exit();
- 
+
 int rc_print_qp_state( void *data );
 void rc_ib_send_msg();
 #endif /* DARE_IBV_RC_H */

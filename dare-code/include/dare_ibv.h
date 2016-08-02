@@ -48,7 +48,7 @@ struct ud_ep_t {
     uint16_t lid;
     uint32_t qpn;
     struct ibv_ah *ah;
-    uint8_t raw[16];
+
 };
 typedef struct ud_ep_t ud_ep_t;
 

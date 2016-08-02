@@ -60,6 +60,8 @@ rc_qp_destroy( dare_ib_ep_t* ep);
 static int
 rc_qp_init_to_rtr( dare_ib_ep_t *ep, int qp_id );
 static int
+rc_qp_init_to_rtr_back( dare_ib_ep_t *ep, int qp_id, uint8_t* raw );
+static int
 rc_qp_rtr_to_rts( dare_ib_ep_t *ep, int qp_id );
 static int
 rc_qp_reset_to_rts(dare_ib_ep_t *ep, int qp_id);
@@ -2094,6 +2096,40 @@ int rc_connect_server( uint8_t idx, int qp_id )
     return 0;
 }
 
+int rc_connect_server_back( uint8_t idx, int qp_id, uint8_t* raw )
+{
+    int rc;
+    struct ibv_qp_attr attr;
+    struct ibv_qp_init_attr init_attr;
+    dare_ib_ep_t *ep = (dare_ib_ep_t*)SRV_DATA->config.servers[idx].ep;
+
+    //ev_tstamp start_ts = ev_now(SRV_DATA->loop);
+
+    ibv_query_qp(ep->rc_ep.rc_qp[qp_id].qp, &attr, IBV_QP_STATE, &init_attr);
+    if (attr.qp_state != IBV_QPS_RESET) {
+        rc = rc_qp_reset(ep, qp_id);
+        if (0 != rc) {
+            error_return(1, log_fp, "Cannot move QP to reset state\n");
+        }
+    }
+
+    rc = rc_qp_reset_to_init(ep, qp_id);
+    if (0 != rc) {
+        error_return(1, log_fp, "Cannot move QP to init state\n");
+    }
+    rc = rc_qp_init_to_rtr_back(ep, qp_id, raw);
+    if (0 != rc) {
+        error_return(1, log_fp, "Cannot move QP to RTR state\n");
+    }
+    rc = rc_qp_rtr_to_rts(ep, qp_id);
+    if (0 != rc) {
+        error_return(1, log_fp, "Cannot move QP to RTS state\n");
+    }
+
+    //info_wtime(log_fp, " # Connect server: %lf (ms)\n", (ev_now(SRV_DATA->loop) - start_ts)*1000);
+    return 0;
+}
+
 /**
  * Revoke remote log access; that is,
  * move all log QPs to RESET state: *->RESET
@@ -2302,6 +2338,64 @@ rc_qp_init_to_rtr( dare_ib_ep_t *ep, int qp_id )
 
     memset(&attr.ah_attr.grh, 0, sizeof(struct ibv_global_route));
     memcpy(&(attr.ah_attr.grh.dgid.raw), &((ep->ud_ep).raw), sizeof(attr.ah_attr.grh.dgid.raw));
+
+    rc = ibv_modify_qp(ep->rc_ep.rc_qp[qp_id].qp, &attr,
+                        IBV_QP_STATE | IBV_QP_PATH_MTU |
+                        IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER |
+                        IBV_QP_RQ_PSN | IBV_QP_AV | IBV_QP_DEST_QPN);
+    if (0 != rc) {
+        error_return(1, log_fp, "ibv_modify_qp failed because %s\n", strerror(rc));
+    }
+
+    //debug(log_fp, "Move %s QP of lid=%"PRIu16" into RTR state RQ_PSN=%"PRIu32"\n",
+    //               log ? "log":"ctrl", ep->ud_ep.lid, attr.rq_psn);
+    return 0;
+}
+
+static int
+rc_qp_init_to_rtr_back( dare_ib_ep_t *ep, int qp_id,uint8_t* raw )
+{
+    int rc;
+    struct ibv_qp_attr attr;
+#ifdef TERM_PSN
+    uint32_t psn;
+    if (LOG_QP == qp_id) {
+        uint64_t term = SID_GET_TERM(SRV_DATA->ctrl_data->sid);
+        psn = (uint32_t)(term & 0xFFFFFF);
+    }
+#endif
+    //struct ibv_qp_init_attr init_attr;
+    //uint8_t max_dest_rd_atomic;
+    //ibv_query_qp(ep->rc_ep.rc_qp[qp_id].qp, &attr, IBV_QP_MAX_DEST_RD_ATOMIC, &init_attr);
+    //max_dest_rd_atomic = attr.max_dest_rd_atomic;
+
+    /* Move the QP into the RTR state */
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state           = IBV_QPS_RTR;
+    /* Setup attributes */
+    attr.path_mtu           = ep->mtu;
+    attr.max_dest_rd_atomic = IBDEV->ib_dev_attr.max_qp_rd_atom;
+    attr.min_rnr_timer      = 12;
+    attr.dest_qp_num        = ep->rc_ep.rc_qp[qp_id].qpn;
+#ifdef TERM_PSN
+    attr.rq_psn             = (LOG_QP == qp_id) ? psn : CTRL_PSN;
+#else
+    attr.rq_psn             = (LOG_QP == qp_id) ? LOG_PSN : CTRL_PSN;
+#endif
+    /* Note: this needs to modified for the lock; see rc_log_qp_lock */
+    attr.ah_attr.is_global     = 0;
+    attr.ah_attr.dlid          = ep->ud_ep.lid;
+    attr.ah_attr.port_num      = IBDEV->port_num;
+    attr.ah_attr.sl            = 0;
+    attr.ah_attr.src_path_bits = 0;
+
+    attr.ah_attr.is_global = 1;
+    attr.ah_attr.port_num = 1;
+    memcpy(&attr.ah_attr.grh.dgid, raw, 16);
+    attr.ah_attr.grh.flow_label = 0;
+    attr.ah_attr.grh.hop_limit = 1;
+    attr.ah_attr.grh.sgid_index = 0;
+    attr.ah_attr.grh.traffic_class = 0;
 
     rc = ibv_modify_qp(ep->rc_ep.rc_qp[qp_id].qp, &attr,
                         IBV_QP_STATE | IBV_QP_PATH_MTU |
