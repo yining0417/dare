@@ -2301,7 +2301,7 @@ rc_qp_init_to_rtr( dare_ib_ep_t *ep, int qp_id )
     attr.ah_attr.src_path_bits = 0;
 
     memset(&attr.ah_attr.grh, 0, sizeof(struct ibv_global_route));
-    memcpy(&(attr.ah_attr.grh.dgid.raw), (ep->ud_ep).raw, sizeof(attr.ah_attr.grh.dgid.raw));
+    memcpy(&(attr.ah_attr.grh.dgid.raw), &((ep->ud_ep).raw), sizeof(attr.ah_attr.grh.dgid.raw));
 
     rc = ibv_modify_qp(ep->rc_ep.rc_qp[qp_id].qp, &attr,
                         IBV_QP_STATE | IBV_QP_PATH_MTU |
