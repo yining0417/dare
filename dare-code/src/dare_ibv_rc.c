@@ -2336,6 +2336,14 @@ rc_qp_init_to_rtr( dare_ib_ep_t *ep, int qp_id )
     attr.ah_attr.sl            = 0;
     attr.ah_attr.src_path_bits = 0;
 
+    attr.ah_attr.is_global = 1;
+    attr.ah_attr.port_num = 1;
+    memcpy(&attr.ah_attr.grh.dgid, ep->gid, 16);
+    attr.ah_attr.grh.flow_label = 0;
+    attr.ah_attr.grh.hop_limit = 1;
+    attr.ah_attr.grh.sgid_index = 0;
+    attr.ah_attr.grh.traffic_class = 0;
+
     //memset(&attr.ah_attr.grh, 0, sizeof(struct ibv_global_route));
     //memcpy(&(attr.ah_attr.grh.dgid.raw), &((ep->ud_ep).raw), sizeof(attr.ah_attr.grh.dgid.raw));
 
