@@ -81,7 +81,9 @@ typedef struct rc_ep_t rc_ep_t;
 struct dare_ib_ep_t {
     ud_ep_t ud_ep;  // UD info
     rc_ep_t rc_ep;  // RC info
+    uint8_t gid[16];
     uint32_t mtu;
+    //int get_gid;
     int rc_connected;
     int log_access;
 };
