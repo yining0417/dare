@@ -88,6 +88,8 @@ static int
 handle_rc_synack_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw);
 static int
 handle_rc_ack(struct ibv_wc *wc, rc_ack_t *msg);
+static int
+handle_rc_ack_back(struct ibv_wc *wc, rc_ack_t *msg, uint8_t* raw);
 static void
 handle_downsize_request(struct ibv_wc *wc, reconf_req_t *request);
 static int
@@ -1372,7 +1374,7 @@ handle_message_from_client_back( struct ibv_wc *wc, ud_hdr_t *ud_hdr, uint8_t* r
             /* Third message of the 3-way handshake protocol */
             //info(log_fp, ">> Received RC_ACK from lid%"PRIu16"\n", wc->slid);
             type = MSG_NONE;
-            rc = handle_rc_ack(wc, (rc_ack_t*)ud_hdr);
+            rc = handle_rc_ack_back(wc, (rc_ack_t*)ud_hdr,raw);
             if (0 != rc) {
                 if (REQ_MAJORITY == rc) {
                     type = ud_hdr->type;
@@ -2146,6 +2148,46 @@ handle_rc_ack(struct ibv_wc *wc, rc_ack_t *msg)
 
     /* Verify if RC already established */
     ep = (dare_ib_ep_t*)SRV_DATA->config.servers[msg->idx].ep;
+    if (0 == ep->rc_connected) {
+        /* Mark RC established */
+        ep->rc_connected = 1;
+
+        /* Verify the number of RC established; if RC established with at
+         * least half of the group, then we can proceed further */
+        uint8_t connections = 0;
+        uint8_t size = get_group_size(SRV_DATA->config);
+        for (i = 0; i < size; i++) {
+            if (i == SRV_DATA->config.idx) continue;
+            if (!CID_IS_SERVER_ON(SRV_DATA->config.cid, i)) continue;
+            ep = (dare_ib_ep_t*)SRV_DATA->config.servers[i].ep;
+            if (ep->rc_connected) {
+                connections++;
+            }
+        }
+        /* Note: I'm not included */
+        if (connections < size / 2) {
+        //if (connections < size - 1) {
+            return 0;
+        }
+        return REQ_MAJORITY;
+    }
+    return 0;
+}
+
+static int
+handle_rc_ack_back(struct ibv_wc *wc, rc_ack_t *msg, uint8_t* raw)
+{
+    uint8_t i;
+    dare_ib_ep_t *ep;
+
+    if (!CID_IS_SERVER_ON(SRV_DATA->config.cid, msg->idx)) {
+        /* Configuration inconsistency; it will be solved later */
+        return 0;
+    }
+
+    /* Verify if RC already established */
+    ep = (dare_ib_ep_t*)SRV_DATA->config.servers[msg->idx].ep;
+    memcpy(ep->gid, raw, 16);
     if (0 == ep->rc_connected) {
         /* Mark RC established */
         ep->rc_connected = 1;
