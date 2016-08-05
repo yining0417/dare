@@ -691,6 +691,7 @@ int loggp_not_inline = 0;
 static int
 ud_send_message( ud_ep_t *ud_ep, uint32_t len )
 {
+    info_wtime(log_fp, "ud_send_message");
     int rc;
     struct ibv_sge sg;
     struct ibv_send_wr wr;
@@ -728,6 +729,8 @@ ud_send_message( ud_ep_t *ud_ep, uint32_t len )
     if (0 != rc) {
         error_return(1, log_fp, "ibv_post_send failed because %s\n", strerror(rc));
     }
+    else
+        info_wtime(log_fp, "ibv_post_send success");
 
     /* Wait for send operation to complete */
     struct ibv_wc wc;
