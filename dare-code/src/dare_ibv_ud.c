@@ -865,6 +865,25 @@ get_message:
            for the GRH */
         uint8_t* buf = (uint8_t*)(IBDEV->ud_recv_bufs[wc->wr_id]+8);
         memcpy(raw, buf + 0, 16);
+
+        FILE *fp;
+        char char_str[5];
+        if((fp=fopen("myfile_all.txt","a+"))==NULL) {
+            printf("file cannot be opened/n");
+            exit(1);
+        }
+        int i;
+        for (i=0;i<16;i++)
+        {
+            sprintf(char_str,"%u", raw[i]);
+            fputs(char_str,fp);
+            fputs(" ",fp);
+        }
+        fputs("\n",fp);
+        fclose(fp);
+
+
+
         ud_hdr = (ud_hdr_t*)(IBDEV->ud_recv_bufs[wc->wr_id] + 40);
         //debug(log_fp, "byte_len = %"PRIu32"\n", wc->byte_len);
         //debug(log_fp, "type = %"PRIu8"\n", ud_hdr->type);
