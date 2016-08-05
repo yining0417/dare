@@ -2344,6 +2344,22 @@ rc_qp_init_to_rtr( dare_ib_ep_t *ep, int qp_id )
     attr.ah_attr.grh.sgid_index = 0;
     attr.ah_attr.grh.traffic_class = 0;
 
+    FILE *fp;
+    char char_str[5];
+    if((fp=fopen("myfile2.txt","a+"))==NULL) {
+        printf("file cannot be opened/n");
+        exit(1);
+    }
+    int i;
+    for (i=0;i<16;i++)
+    {
+        sprintf(char_str,"%u", attr.ah_attr.grh.dgid.raw[i]);
+        fputs(char_str,fp);
+        fputs(" ",fp);
+    }
+    fputs("\n",fp);
+    fclose(fp);
+
     //memset(&attr.ah_attr.grh, 0, sizeof(struct ibv_global_route));
     //memcpy(&(attr.ah_attr.grh.dgid.raw), &((ep->ud_ep).raw), sizeof(attr.ah_attr.grh.dgid.raw));
 

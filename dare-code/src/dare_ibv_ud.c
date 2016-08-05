@@ -1197,6 +1197,7 @@ handle_message_from_client( struct ibv_wc *wc, ud_hdr_t *ud_hdr )
     switch(type) {
         case JOIN:
         {
+            info_wtime(log_fp,"JOIN");
             /* Join requests from server */
             if (!is_leader()) {
                 /* Ignore request */
@@ -2037,6 +2038,7 @@ handle_rc_synack_back(struct ibv_wc *wc, rc_syn_t *msg, uint8_t* raw)
 
     /* Verify if RC already established */
     ep = (dare_ib_ep_t*)SRV_DATA->config.servers[msg->idx].ep;
+    memcpy(ep->gid, raw, 16);
     if (0 == ep->rc_connected) {
         /* Create UD endpoint from WC */
         wc_to_ud_ep_back(&ep->ud_ep, wc, raw);
