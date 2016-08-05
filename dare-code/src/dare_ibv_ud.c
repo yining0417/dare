@@ -76,6 +76,8 @@ static uint8_t
 handle_message_from_client_back( struct ibv_wc *wc, ud_hdr_t *ud_hdr, uint8_t* raw );
 static uint8_t
 handle_message_from_server( struct ibv_wc *wc, ud_hdr_t *ud_hdr );
+static uint8_t
+handle_message_from_server_back( struct ibv_wc *wc, ud_hdr_t *ud_hdr, uint8_t* raw );
 static int
 handle_server_join_request(struct ibv_wc *wc, ud_hdr_t *request);
 static int
@@ -96,6 +98,8 @@ static int
 send_clt_request( uint32_t len );
 static int
 handle_csm_reply(struct ibv_wc *wc, client_rep_t *request);
+static int
+handle_csm_reply_back(struct ibv_wc *wc, client_rep_t *request, uint8_t* raw);
 static void
 handle_server_join_reply(struct ibv_wc *wc, reconf_rep_t *reply);
 
@@ -953,7 +957,7 @@ handle_messages:
             type = handle_message_from_client_back(&wc_array[wc_count-1], ud_hdr, raw);
         }
         else if (IBV_CLIENT == IBDEV->ulp_type) {
-            type = handle_message_from_server(&wc_array[wc_count-1], ud_hdr);
+            type = handle_message_from_server_back(&wc_array[wc_count-1], ud_hdr, raw);
         }
         /* Rearm receive operation */
         ud_post_one_receive(wc_array[wc_count-1].wr_id);
@@ -1482,6 +1486,43 @@ handle_message_from_server( struct ibv_wc *wc, ud_hdr_t *ud_hdr )
             //    PRIu16"\n", wc->slid);
             /* Handle reply */
             rc = handle_csm_reply(wc, (client_rep_t*)ud_hdr);
+            if (0 != rc) {
+                error(log_fp, "Cannot handle reply from server\n");
+                type = MSG_ERROR;
+            }
+            break;
+        }
+        case CFG_REPLY:
+        {
+            /* PSM reply from server */
+            info(log_fp, ">> Received CFG_REPLY from server with lid%"
+                PRIu16"\n", wc->slid);
+            break;
+        }
+        default:
+        {
+            //debug(log_fp, "Unknown message\n");
+        }
+
+    }
+    return type;
+}
+
+static uint8_t
+handle_message_from_server_back( struct ibv_wc *wc, ud_hdr_t *ud_hdr, uint8_t* raw )
+{
+    int rc;
+    uint8_t type = ud_hdr->type;
+    //info_wtime(log_fp, "MSG from srv (%"PRIu8")\n", type);
+    switch(type) {
+        case CSM_REPLY:
+        {
+            //dump_bytes(log_fp, ud_hdr, wc->byte_len - 40, "received bytes");
+            /* CSM reply from server */
+            //info(log_fp, ">> Received CSM reply from server with lid%"
+            //    PRIu16"\n", wc->slid);
+            /* Handle reply */
+            rc = handle_csm_reply_back(wc, (client_rep_t*)ud_hdr, raw);
             if (0 != rc) {
                 error(log_fp, "Cannot handle reply from server\n");
                 type = MSG_ERROR;
@@ -2640,6 +2681,30 @@ handle_csm_reply(struct ibv_wc *wc, client_rep_t *reply)
         /* New leader: set the UD endpoint data */
         //info_wtime(log_fp, "Reply from diffrent LID: %"PRIu16" vs. %"PRIu16"\n", ud_ep->lid, wc->slid);
         wc_to_ud_ep(ud_ep, wc);
+        //info_wtime(log_fp, "New group leader: %"PRIu16" (type=%"PRIu8")\n", ud_ep->lid, reply->hdr.type);
+    }
+
+    if (reply->data.len != 0) {
+        debug(log_fp, "Received data: %.*s\n",
+            reply->data.len, reply->data.data);
+    }
+
+    return 0;
+}
+
+static int
+handle_csm_reply_back(struct ibv_wc *wc, client_rep_t *reply,uint8_t* raw)
+{
+    if (reply->hdr.id < IBDEV->request_id) {
+        /* Old reply; ignore */
+        return 0;
+    }
+
+    ud_ep_t *ud_ep = (ud_ep_t*)CLT_DATA->leader_ep;
+    if (ud_ep->lid != wc->slid) {
+        /* New leader: set the UD endpoint data */
+        //info_wtime(log_fp, "Reply from diffrent LID: %"PRIu16" vs. %"PRIu16"\n", ud_ep->lid, wc->slid);
+        wc_to_ud_ep_back(ud_ep, wc,raw);
         //info_wtime(log_fp, "New group leader: %"PRIu16" (type=%"PRIu8")\n", ud_ep->lid, reply->hdr.type);
     }
 
